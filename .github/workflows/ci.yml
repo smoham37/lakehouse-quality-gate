@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: "Install dependencies"
+        run: pip install -r requirements.txt
+      - name: "Ruff check"
+        run: ruff check .
+      - name: "Ruff format check"
+        run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: "Install dependencies"
+        run: pip install -r requirements.txt
+      - name: "Run offline test suite (DuckDB + local fixtures, no network)"
+        run: python -m pytest -q
+
+  dag-structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: "Install Airflow (separate env: conflicts with dbt-core/GE pins)"
+        run: pip install -r requirements-airflow.txt
+      - name: "Run DAG structure tests"
+        env:
+          AIRFLOW_HOME: ${{ github.workspace }}/.airflow_home
+        run: python -m pytest tests/airflow/test_dag_structure.py -q
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Build pipeline image (build only -- no docker daemon assumed at unit-test time)"
+        run: docker build -t lakehouse-quality-gate .
